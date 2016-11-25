@@ -514,21 +514,56 @@ class AvS_FastSimpleImport_Model_Import_Entity_Product extends AvS_FastSimpleImp
             foreach ($collection as $category) {
                 $structure = explode('/', $category->getPath());
                 $pathSize = count($structure);
-                if ($pathSize > 2) {
+                if ($pathSize > 1) {
                     $path = array();
-                    $this->_categories[implode('/', $path)] = $category->getId();
                     for ($i = 1; $i < $pathSize; $i++) {
-                        $item = $collection->getItemById($structure[$i]);
-                        if ($item instanceof Varien_Object) {
-                            $path[] = $item->getName();
-                        }
+                        $path[] = $collection->getItemById($structure[$i])->getName();
                     }
+                    $rootCategoryName = array_shift($path);
+                    if (!isset($this->_categoriesWithRoots[$rootCategoryName])) {
+                        $this->_categoriesWithRoots[$rootCategoryName] = array();
+                    }
+                    $index = implode('/', $path);
+                    $this->_categoriesWithRoots[$rootCategoryName][$index] = $category->getId();
+                    if ($pathSize > 2) {
+                        $path = array();
+                        $this->_categories[implode('/', $path)] = $category->getId();
+                        for ($i = 1; $i < $pathSize; $i++) {
+                            $item = $collection->getItemById($structure[$i]);
+                            if ($item instanceof Varien_Object) {
+                                $path[] = $item->getName();
+                            }
+                        }
 
-                    // additional options for category referencing: name starting from base category, or category id
-                    $this->_categories[implode('/', $path)] = $category->getId();
-                    array_shift($path);
-                    $this->_categories[implode('/', $path)] = $category->getId();
-                    $this->_categories[$category->getId()] = $category->getId();
+                        // additional options for category referencing: name starting from base category, or category id
+                        $this->_categories[implode('/', $path)] = $category->getId();
+                        array_shift($path);
+                        $this->_categories[implode('/', $path)] = $category->getId();
+                        $this->_categories[$category->getId()] = $category->getId();
+
+                    }
+                }
+            }
+        }
+
+        $collection = Mage::getResourceModel('catalog/category_collection')->addNameToResult();
+        /* @var $collection Mage_Catalog_Model_Resource_Eav_Mysql4_Category_Collection */
+        foreach ($collection as $category) {
+            $structure = explode('/', $category->getPath());
+            $pathSize  = count($structure);
+            if ($pathSize > 1) {
+                $path = array();
+                for ($i = 1; $i < $pathSize; $i++) {
+                    $path[] = $collection->getItemById($structure[$i])->getName();
+                }
+                $rootCategoryName = array_shift($path);
+                if (!isset($this->_categoriesWithRoots[$rootCategoryName])) {
+                    $this->_categoriesWithRoots[$rootCategoryName] = array();
+                }
+                $index = implode('/', $path);
+                $this->_categoriesWithRoots[$rootCategoryName][$index] = $category->getId();
+                if ($pathSize > 2) {
+                    $this->_categories[$index] = $category->getId();
                 }
             }
         }
