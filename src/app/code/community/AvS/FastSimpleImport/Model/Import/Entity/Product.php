@@ -354,9 +354,12 @@ class AvS_FastSimpleImport_Model_Import_Entity_Product extends AvS_FastSimpleImp
     }
 
     /**
-     * @param Mage_Eav_Model_Entity_Attribute $attribute   Attribute
-     * @param string                          $optionLabel Frontend label
-     * @return void
+     * This method replaces the parent's method so _initTypeModels isn't called.
+     * The latter method causes a memory leak somewhere down the line.
+     * Fixed in the replacement hack in this class: _updateTypeModelAttributeOptions
+     *
+     * @param Mage_Eav_Model_Entity_Attribute $attribute
+     * @param string $optionLabel
      */
     protected function _createAttributeOption($attribute, $optionLabel)
     {
@@ -367,13 +370,43 @@ class AvS_FastSimpleImport_Model_Import_Entity_Product extends AvS_FastSimpleImp
             'order' => array(0),
             'delete' => array('')
         );
-
         $attribute->setOption($option);
-
         $attribute->save();
-
         $this->_attributeOptions[$attribute->getAttributeCode()][] = $optionLabel;
-        $this->_initTypeModels();
+        $this->_updateTypeModelAttributeOptions($attribute, $optionLabel);
+        //$this->_initTypeModels();
+    }
+
+    /**
+     * Add the new option to all product type models attribute sets which contain the attribute.
+     * This is to avoid a memory leak during _initTypeModels()
+     *
+     * @param Mage_Eav_Model_Entity_Attribute $attribute
+     * @param array $optionLabel
+     */
+    protected function _updateTypeModelAttributeOptions(Mage_Eav_Model_Entity_Attribute $attribute, $optionLabel)
+    {
+        // Trigger reload of options
+        $source = $attribute->getSource();
+        $optionsReflection = new ReflectionProperty($source, '_options');
+        $optionsReflection->setAccessible(true);
+        $optionsReflection->setValue($source, null); // Trigger reload of options incl. the new one
+        $optionsReflection->setAccessible(false);
+        /** @var $typeModel AvS_FastSimpleImport_Model_Import_Entity_Product_Type_Simple */
+        foreach ($this->_productTypeModels as $typeModel) {
+            $attrCode = $attribute->getAttributeCode();
+            $attributeSetsReflection = new ReflectionProperty($typeModel, '_attributes');
+            $attributeSetsReflection->setAccessible(true);
+            $sets = $attributeSetsReflection->getValue($typeModel);
+            foreach ($sets as $set => $attributes) {
+                if (isset($attributes[$attrCode])) {
+                    $newOptions = $this->getAttributeOptions($attribute);
+                    $sets[$set][$attrCode]['options'] = $newOptions;
+                }
+            }
+            $attributeSetsReflection->setValue($typeModel, $sets);
+            $attributeSetsReflection->setAccessible(false);
+        }
     }
 
     /**
